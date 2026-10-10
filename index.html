@@ -1,0 +1,127 @@
+﻿<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <title>VIBE · Giriş Testi</title>
+  <style>
+    body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #e8f4ff; }
+    .kutu { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; min-width: 300px; }
+    h2 { color: #2b7cd6; margin-top: 0; }
+    button { background: #4da6ff; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; margin: 5px; }
+    button:hover { background: #2b7cd6; }
+    button.cikis { background: #ccc; color: #333; }
+    button.cikis:hover { background: #aaa; }
+    #kullaniciBilgi { margin-top: 20px; }
+    #kullaniciBilgi img { width: 60px; height: 60px; border-radius: 50%; margin-bottom: 10px; }
+    .hata { color: red; font-size: 13px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="kutu">
+    <h2>?? VIBE Meme Arşivi</h2>
+
+    <div id="girisAlani">
+      <p>Devam etmek için giriş yap</p>
+      <button id="googleGiris">Google ile Giriş Yap</button>
+    </div>
+
+    <div id="kullaniciBilgi" style="display:none;">
+      <img id="avatar" src="" alt="" />
+      <p>Hoş geldin, <b id="isim"></b>!</p>
+      <p style="font-size:12px; color:#666;" id="email"></p>
+      <p style="font-size:12px; color:#666;" id="uid"></p>
+      <button class="cikis" id="cikis">Çıkış Yap</button>
+    </div>
+
+    <div class="hata" id="hata"></div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, serverTimestamp }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+    apiKey: "AIzaSyBZ9g16URW1pgZHp91WE-ZIJWgvPTw1-zE",
+    authDomain: "vibe-fandom.firebaseapp.com",
+    projectId: "vibe-fandom",
+    storageBucket: "vibe-fandom.firebasestorage.app",
+    messagingSenderId: "475044987757",
+    appId: "1:475044987757:web:fb7b32efff68587d439064",
+    measurementId: "G-H966DFNNSH"
+  };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const provider = new GoogleAuthProvider();
+
+    const hataEl = document.getElementById('hata');
+
+    document.getElementById('googleGiris').onclick = async () => {
+      hataEl.textContent = '';
+      try {
+        const result = await signInWithPopup(auth, provider);
+        await kullaniciKaydet(result.user);
+      } catch (e) {
+        hataEl.textContent = "Hata: " + e.message;
+        console.error(e);
+      }
+    };
+
+    document.getElementById('cikis').onclick = () => signOut(auth);
+
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        document.getElementById('girisAlani').style.display = 'none';
+        document.getElementById('kullaniciBilgi').style.display = 'block';
+        document.getElementById('isim').textContent = user.displayName || 'Kullanıcı';
+        document.getElementById('email').textContent = user.email;
+        document.getElementById('uid').textContent = 'UID: ' + user.uid;
+        document.getElementById('avatar').src = user.photoURL || '';
+        await kullaniciKaydet(user);
+      } else {
+        document.getElementById('girisAlani').style.display = 'block';
+        document.getElementById('kullaniciBilgi').style.display = 'none';
+      }
+    });
+
+    async function kullaniciKaydet(user) {
+      try {
+        const ref = doc(db, 'kullanicilar', user.uid);
+        const snap = await getDoc(ref);
+        const bugun = new Date().toISOString().slice(0,10);
+
+        if (!snap.exists()) {
+          await setDoc(ref, {
+            isim: user.displayName || '',
+            email: user.email || '',
+            ilkGiris: bugun,
+            sonGiris: bugun,
+            toplamGiris: 1,
+            favoriler: [],
+            goruntulenenler: [],
+            olusturulma: serverTimestamp()
+          });
+          console.log('? Yeni kullanıcı Firestore\'a kaydedildi.');
+        } else {
+          const data = snap.data();
+          const yeniToplam = (data.sonGiris !== bugun)
+            ? (data.toplamGiris || 0) + 1
+            : data.toplamGiris;
+          await setDoc(ref, {
+            sonGiris: bugun,
+            toplamGiris: yeniToplam
+          }, { merge: true });
+          console.log('? Kullanıcı verisi güncellendi. Toplam giriş:', yeniToplam);
+        }
+      } catch (e) {
+        hataEl.textContent = "Firestore hatası: " + e.message;
+        console.error(e);
+      }
+    }
+  </script>
+</body>
+</html>
